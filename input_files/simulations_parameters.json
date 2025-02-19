@@ -1,0 +1,19 @@
+{
+    "system_size"              : 10,
+    "input_dim"                : 2,
+	"num_samples"              : 1000,
+	"num_units"                : 10,
+	"num_layers"               : 2,
+	"equilibration_time"       : 5,
+	"warmup_time"              : 50,
+	"annealing_time"           : 100,
+    "initial_temperature"      : 0.1,
+    "final_temperature"        : 0.00000001,
+    "annealing_on"             : "True",
+    "warmup_on"                : "True",
+    "rnn_type"                 : "gru",
+    "optimizer"                : "adam",
+    "temperature_scheduler"    : "exponential",
+    "lr_scheduler"             : "Exponential"
+}
+    
