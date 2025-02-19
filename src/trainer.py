@@ -19,6 +19,23 @@ wd = os.getcwd()
 
 class VNA_trainer:
 
+  """
+  Trainer for Variational Neural Ansatz (VNA) models in a distributed training setup.
+
+  This class wraps a variational ansatz neural network (the "ansatz") with training utilities,
+  enabling distributed training with PyTorch's DistributedDataParallel (DDP). It performs
+  forward passes, computes energies from a spin model, calculates the cost (loss), and
+  updates the network parameters using an optimizer and a learning rate scheduler.
+    
+  Attributes:
+    gpu_id (int): Identifier for the current GPU.
+    ansatz (DDP): DistributedDataParallel wrapped neural network model.
+    train_data (DataLoader): DataLoader providing the training data batches.
+    optimizer (torch.optim.Optimizer): Optimizer used for training.
+    scheduler: Learning rate scheduler to adjust the optimizer's learning rate.
+    model: Spin model that provides energy and configuration conversions.
+  """
+
   def __init__(self,ansatz: torch.nn.Module,train_data: DataLoader,optimizer: torch.optim.Optimizer,scheduler,model,gpu_id: int):
     
     self.gpu_id = gpu_id
@@ -32,7 +49,18 @@ class VNA_trainer:
   def _run_batch(self, source,Temperature):
     
     """
-    source : input features
+    Process a single batch of training data.
+
+    Performs a forward pass through the ansatz model, obtains a spin configuration from the
+    variational neural ansatz, computes the local energy, calculates the cost function, and 
+    performs a backpropagation step to update the model's parameters.
+
+    Parameters:
+      source (torch.Tensor): Input features for the batch.
+      Temperature (float): Temperature parameter used to weight the log-probabilities.
+
+    Returns:
+      numpy.ndarray: The detached local energies computed for the batch, converted to a NumPy array.
     """
 
     _ = self.ansatz(source)
@@ -50,9 +78,19 @@ class VNA_trainer:
     return Floc.detach().cpu().numpy()
     
   def _run_epoch(self, epoch:int,Temperature):
-
+    
     """
-    epoch : current epoch during training 
+    Run a complete training epoch.
+
+    Iterates over all batches provided by the DataLoader, processing each batch and
+    collecting the corresponding local energies.
+
+    Parameters:
+      epoch (int): The current epoch number.
+      Temperature (float): Temperature parameter used in cost computation.
+
+    Returns:
+      numpy.ndarray: Concatenated local energies from all batches in the epoch.
     """
 
     self.train_data.sampler.set_epoch(epoch)
@@ -68,9 +106,18 @@ class VNA_trainer:
   def _gather(self, data):
 
     """
-    data: data colected from each GPU
-    """
+    Gather data across all GPUs participating in the distributed training.
 
+    Uses torch.distributed.all_gather to collect data (either tensors or convertible data)
+    from all processes and returns a flattened NumPy array containing the gathered data.
+
+    Parameters:
+      data: Data collected from the current GPU. Can be a torch.Tensor or convertible to one.
+
+    Returns:
+      numpy.ndarray: A flattened array of the gathered data from all GPUs.
+    """
+    
     if isinstance(data, torch.Tensor) and data.device == torch.device(f'cuda:{self.gpu_id}'):
       tensor = data
     else:
@@ -86,7 +133,19 @@ class VNA_trainer:
   def train(self, total_epochs: int,Temperature_list,gather_interval:int):
 
     """
-    total_epochs : total training steps 
+    Train the ansatz model for a specified number of epochs.
+
+    Iterates over training epochs, updating the model and adjusting the learning rate. 
+    At specified intervals, gathers the local energy data across GPUs, computes the mean energy,
+    and prints the statistics.
+
+    Parameters:
+      total_epochs (int): Total number of training epochs.
+      Temperature_list (list or array-like): A list of temperature values for each epoch.
+      gather_interval (int): Interval (in epochs) at which to gather and report statistics.
+
+    Returns:
+      numpy.ndarray: An array containing the mean local energy collected at each gathering interval.
     """
 
     all_Floc = []

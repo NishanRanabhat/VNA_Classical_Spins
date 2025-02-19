@@ -4,6 +4,55 @@ import numpy as np
 import random
 
 class binary_disordered_RNNwavefunction(nn.Module):
+
+    """
+    PyTorch module representing a binary disordered RNN wavefunction.
+
+    This neural network architecture is designed to model the wavefunction
+    of a binary disordered system (e.g., spins with two possible states).
+    The model utilizes recurrent neural network (RNN) cells (either vanilla RNN
+    or GRU) arranged per site, with a dedicated dense network mapping the RNN's
+    hidden state to a probability distribution over binary outputs. The network
+    sequentially processes each site (spin) and samples an output according to the
+    learned probabilities, thereby generating a configuration and computing its
+    log-probability.
+
+    Attributes:
+        hidden_dim (int): Number of units in the hidden layer for each RNN cell.
+        input_dim (int): Dimensionality of the input, e.g., 2 for binary (0/1) inputs.
+        n_layers (int): Number of stacked RNN layers per site.
+        N (int): Total number of sites (spins) in the system.
+        activation (str): Activation function used in vanilla RNN cells (e.g., "relu").
+        key (str): Type of RNN cell to use; options are "vanilla" or "gru".
+        type (torch.dtype): Data type for the model's parameters.
+        device (str): Device on which the model will be run (e.g., 'cpu' or 'cuda').
+        permuted (np.ndarray): Array of site indices; by default, sites are ordered sequentially.
+        rnn (nn.ModuleList): List of RNN or GRU cells, arranged per site.
+        dense (nn.ModuleList): List of dense networks (one per site) that map the hidden state
+                               to output probabilities.
+        samples (torch.Tensor): Tensor to store the sampled output configuration.
+        log_probs (torch.Tensor): Tensor storing the log-probability of the generated sequence.
+
+    Parameters:
+        key (str): Specifies the type of RNN cell to use ("vanilla" for nn.RNNCell,
+                   "gru" for nn.GRUCell).
+        system_size (int): Total number of sites (spins) in the system.
+        inputdim (int): Dimensionality of the input at each site.
+        nlayers (int): Number of recurrent layers to stack per site.
+        activation (str, optional): Activation function for the vanilla RNN. Default is "relu".
+        units (int, optional): Number of units in each RNN cell. Default is 10.
+        seed (int, optional): Random seed for reproducibility. Default is 111.
+        type (torch.dtype, optional): Data type for tensors. Default is torch.float32.
+        device (str, optional): Device to run the model on. Default is 'cpu'.
+
+    Example:
+        >>> model = binary_disordered_RNNwavefunction(
+                key="gru", system_size=20, inputdim=2, nlayers=2, activation="relu", units=50, device="cuda"
+            )
+        >>> inputs = torch.ones(5, 2)  # batch of 5 samples with one-hot binary inputs
+        >>> output_probs = model(inputs)
+    """
+
     def __init__(self, key, system_size, inputdim, nlayers, activation="relu",units=10, seed=111, type=torch.float32, device='cpu'):
         super(binary_disordered_RNNwavefunction, self).__init__()
         
@@ -52,6 +101,27 @@ class binary_disordered_RNNwavefunction(nn.Module):
 
     def forward(self, inputs):
 
+        """
+        Perform a forward pass through the network to generate a wavefunction sample.
+
+        The forward pass processes the input sequentially for each site (spin) in the
+        system. For each site, the network:
+            1. Propagates the input through its stack of RNN cells.
+            2. Uses a dense network to compute the probability distribution over
+               the binary outputs.
+            3. Samples from the computed distribution to obtain a configuration.
+            4. Feeds a one-hot encoded version of the sample as input for the next site.
+        After processing all sites, the method computes the total log-probability
+        of the generated configuration.
+
+        Parameters:
+            inputs (torch.Tensor): The initial input tensor of shape (batch_size, input_dim).
+
+        Returns:
+            torch.Tensor: A tensor of probabilities with shape (batch_size, N, input_dim),
+                          where each entry corresponds to the output probabilities at a site.
+        """
+
         hiddens = []  # List to store hidden states per RNN layer
         batch_size = inputs.shape[0]
 
@@ -99,5 +169,3 @@ class binary_disordered_RNNwavefunction(nn.Module):
         self.log_probs = torch.sum(torch.log(torch.sum(torch.multiply(probs, one_hot_samples), dim=2) + 1e-10),dim=1)
 
         return probs
-
-

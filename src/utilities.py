@@ -12,6 +12,29 @@ import time
 wd = os.getcwd() 
 
 def set_annealing_schedule(warmup_on, scheduler, warmup_time, annealing_time, equilibrium_time, T0, Tf, ftype):
+
+  """
+  Create an annealing schedule for the temperature parameter during training.
+
+  The function constructs a temperature schedule based on the specified scheduler type 
+  ("exponential", "linear", or "quadratic") and whether a warmup period is applied.
+  The schedule is built using the total number of steps derived from annealing_time and 
+  equilibrium_time (and warmup_time if applicable). The resulting temperature list is 
+  returned as a torch tensor of the specified floating point type.
+
+  Parameters:
+    warmup_on (str): Indicates whether a warmup period is used ("True" or "False").
+    scheduler (str): Type of scheduler to use ("exponential", "linear", or "quadratic").
+    warmup_time (int): Number of steps dedicated to the warmup period.
+    annealing_time (int): Number of annealing steps.
+    equilibrium_time (int): Number of steps per annealing step.
+    T0 (float): Initial temperature.
+    Tf (float): Final temperature.
+    ftype (torch.dtype): Floating point data type for the temperature tensor.
+
+  Returns:
+    torch.Tensor: A tensor containing the scheduled temperature values.
+  """
   nsteps = annealing_time*equilibrium_time + 1
   num_steps = annealing_time*equilibrium_time + warmup_time + 1 
 
@@ -72,7 +95,27 @@ def set_annealing_schedule(warmup_on, scheduler, warmup_time, annealing_time, eq
 
 def model_ansatz(key:str,system_size:int,input_dim:int, num_layers:int,ftype:torch.dtype,**kwargs):
 
-  # Extract optional parameters from kwargs with default
+  """
+  Initialize the variational ansatz model.
+
+  This function creates an instance of the binary_disordered_RNNwavefunction using the
+  provided parameters and any additional optional parameters specified in kwargs.
+
+  Parameters:
+    key (str): Specifies the type of RNN cell ("vanilla" or "gru").
+    system_size (int): Number of spins (sites) in the system.
+    input_dim (int): Dimensionality of the input (e.g., 2 for binary systems).
+    num_layers (int): Number of recurrent layers per site.
+    ftype (torch.dtype): Data type for model parameters.
+    **kwargs: Additional optional parameters, including:
+        - num_units (int): Number of units in each RNN cell (default: 10).
+        - seed (int): Random seed for reproducibility (default: 111).
+        - device: Device on which the model is allocated (e.g., 'cpu' or 'cuda').
+
+  Returns:
+    binary_disordered_RNNwavefunction: Instantiated ansatz model.
+  """
+
   num_units = kwargs.get('num_units',10)
   seed = kwargs.get('seed', 111)
   device = kwargs.get('device')
@@ -83,11 +126,36 @@ def model_ansatz(key:str,system_size:int,input_dim:int, num_layers:int,ftype:tor
 
 def model_class(system_size,J_matrix,device,ftype):
 
-    model = One_dimensional_spin_model(system_size,J_matrix,device,ftype)
+  """
+  Initialize the one-dimensional spin model.
 
-    return model
+  Parameters:
+    system_size (int): Total number of spins in the system.
+    J_matrix (array-like): Coupling matrix for the spin interactions.
+    device: Device on which the model is allocated (e.g., 'cpu' or 'cuda').
+    ftype (torch.dtype): Data type for model parameters.
+
+  Returns:
+    One_dimensional_spin_model: Instantiated spin model.
+  """
+
+  model = One_dimensional_spin_model(system_size,J_matrix,device,ftype)
+
+  return model
 
 def optimizer_init(ansatz,learningrate = 1e-3,optimizer_type="adam"):
+
+  """
+  Initialize the optimizer for the ansatz model.
+
+  Parameters:
+    ansatz (torch.nn.Module): The model parameters to be optimized.
+    learningrate (float, optional): Learning rate for the optimizer (default: 1e-3).
+    optimizer_type (str, optional): Type of optimizer ("adam", "rmsprop", or "sgd").
+
+  Returns:
+    torch.optim.Optimizer: The instantiated optimizer.
+  """
 
   if optimizer_type == "adam":
     optimizer = torch.optim.Adam(ansatz.parameters(), lr= learningrate) 
@@ -99,6 +167,19 @@ def optimizer_init(ansatz,learningrate = 1e-3,optimizer_type="adam"):
   return optimizer
 
 def scheduler_init(optimizer, num_steps:int, scheduler_name="None"):
+
+  """
+  Initialize the learning rate scheduler.
+
+  Parameters:
+    optimizer (torch.optim.Optimizer): The optimizer whose learning rate will be scheduled.
+    num_steps (int): Number of steps for scheduling, used by some schedulers.
+    scheduler_name (str, optional): Type of scheduler to use. Options include:
+        "StepLR", "ReduceLROnPlateau", "MultiStep", "CosineAnnealingLR", "MultiplicativeLR", "Exponential", or "None".
+
+  Returns:
+    Scheduler: The instantiated learning rate scheduler, or None if scheduler_name is "None".
+  """
   
   decay_factor = 0.9999
 
@@ -119,25 +200,45 @@ def scheduler_init(optimizer, num_steps:int, scheduler_name="None"):
 
   return scheduler
 
-"""
-This function takes seed as an argument and initializes all random number 
-generators (random, numpy, torch, and torch.cuda) based on this seed. 
-Each GPU process will receive a unique process_seed (calculated as seed + rank) 
-ensuring different seeds across processes.
-"""
 def seed_everything(seed, rank):
 
-    seed = seed + rank #unique seed because of rank
+  """
+  Seed all random number generators for reproducibility across processes.
 
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+  This function sets the seed for Python's random, NumPy, and PyTorch (both CPU and GPU) 
+  random number generators. A unique seed is calculated for each GPU process by adding the rank.
+
+  Parameters:
+    seed (int): Base seed value.
+    rank (int): Rank of the current process, used to ensure unique seeding across GPUs.
+  """
+
+  seed = seed + rank #unique seed because of rank
+
+  random.seed(seed)
+  np.random.seed(seed)
+  torch.manual_seed(seed)
+  torch.cuda.manual_seed(seed)
+  torch.cuda.manual_seed_all(seed)
+  torch.backends.cudnn.deterministic = True
+  torch.backends.cudnn.benchmark = False
 
 def input_data(num_samples:int,input_size:int,ftype:torch.dtype):
+
+  """
+  Create dummy input data for testing or initialization.
+
+  Generates a dummy input tensor of shape (num_samples, input_size) with all zeros,
+  except for the first column which is set to ones.
+
+  Parameters:
+    num_samples (int): Number of samples (rows) in the dummy input.
+    input_size (int): Number of features (columns) per sample.
+    ftype (torch.dtype): Data type for the tensor.
+
+  Returns:
+    torch.Tensor: The dummy input tensor.
+  """
 
   dummy_input = torch.zeros(num_samples,input_size, dtype=ftype)
   dummy_input[:,0] = torch.ones(num_samples, dtype=ftype)
@@ -145,6 +246,29 @@ def input_data(num_samples:int,input_size:int,ftype:torch.dtype):
   return dummy_input
 
 def prepare_dataloader(dataset, world_size: int, rank, batch_size: int):
-    
-  return DataLoader(dataset, batch_size=batch_size, pin_memory=True, shuffle=False, sampler=DistributedSampler(dataset,num_replicas=world_size, rank=rank),num_workers = 4,persistent_workers=True)
 
+  """
+  Prepare a distributed DataLoader for use in multi-GPU training.
+
+  Wraps the provided dataset with a DistributedSampler to ensure each process 
+  gets a unique subset of the data, and returns a DataLoader with the specified 
+  batch size and worker configuration.
+
+  Parameters:
+    dataset (Dataset): The dataset to load.
+    world_size (int): Total number of processes (GPUs) used in training.
+    rank (int): Rank of the current process.
+    batch_size (int): Number of samples per batch.
+
+  Returns:
+    DataLoader: Configured DataLoader for distributed training.
+  """
+    
+  return DataLoader(
+    dataset,
+    batch_size=batch_size,
+    pin_memory=True,
+    shuffle=False,
+    sampler=DistributedSampler(dataset, num_replicas=world_size, rank=rank),
+    num_workers=4,
+    persistent_workers=True)
