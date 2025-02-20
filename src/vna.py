@@ -108,6 +108,6 @@ def run_VNA(rank: int, world_size: int,train_batch_size: int,key:str, num_layers
     model = model_class(system_size,J_matrix,device,ftype)
 
     trainer = VNA_trainer(ansatz,train_data,optimizer,scheduler,model,rank)
-    meanE = trainer.train(stop_time, Temperature_list,gather_interval)
+    meanE, meanM = trainer.train(stop_time, Temperature_list,gather_interval)
 
     cleanup()

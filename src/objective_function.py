@@ -67,3 +67,16 @@ class One_dimensional_spin_model:
     # We can write it in a symmetric form:
     energy = -1.0*torch.sum(configs.t() * (self.J_matrix @ configs.t()),dim=0)
     return energy
+
+  def magnetization(self,configs):
+
+    """
+    Compute the magnetization of a spin configuration.
+        
+    Parameters:
+      - config: A torch tensor of shape (num_samples,N) with entries +1 or -1.
+        
+      Returns:
+        - magnetization (scalar).
+      """
+    return configs.sum(dim=1)/self.N

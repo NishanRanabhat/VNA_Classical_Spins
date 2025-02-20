@@ -67,6 +67,7 @@ class VNA_trainer:
 
     configs = self.model.get_configs(self.ansatz.module.samples)
     local_energies = self.model.energy(configs)
+    magnetization = self.model.magnetization(configs)
     log_probs = self.ansatz.module.log_probs
     Floc = local_energies + Temperature * log_probs
     cost = torch.mean(log_probs * Floc.detach()) - torch.mean(log_probs) * torch.mean(Floc.detach())
@@ -75,7 +76,7 @@ class VNA_trainer:
     cost.backward()
     self.optimizer.step()
 
-    return Floc.detach().cpu().numpy()
+    return Floc.detach().cpu().numpy(), magnetization.detach().cpu().numpy()
     
   def _run_epoch(self, epoch:int,Temperature):
     
@@ -94,14 +95,15 @@ class VNA_trainer:
     """
 
     self.train_data.sampler.set_epoch(epoch)
-    epoch_Floc = []
+    epoch_Floc, epoch_mag = [],[]
 
     for batch_idx, source in enumerate(self.train_data):
       source = source.to(self.gpu_id)   
-      Floc = self._run_batch(source,Temperature)
+      Floc, mag = self._run_batch(source,Temperature)
       epoch_Floc.append(Floc)
+      epoch_mag.append(mag)
 
-    return np.concatenate(epoch_Floc)
+    return np.concatenate(epoch_Floc),np.concatenate(epoch_mag)
 
   def _gather(self, data):
 
@@ -148,21 +150,24 @@ class VNA_trainer:
       numpy.ndarray: An array containing the mean local energy collected at each gathering interval.
     """
 
-    all_Floc = []
+    all_Floc, all_mag = [],[]
 
     for epoch in range(total_epochs):
 
       Temperature = Temperature_list[epoch]
-      Floc = self._run_epoch(epoch,Temperature)
+      Floc,mag = self._run_epoch(epoch,Temperature)
       self.scheduler.step()
 
       if epoch % gather_interval == 0 or epoch == 0 or epoch == total_epochs-1:
 
         gathered_Floc = self._gather(Floc)
+        gathered_mag = self._gather(mag)
         all_Floc.append(np.mean(gathered_Floc))
+        all_mag.append(np.mean(gathered_mag))
  
 
       if self.gpu_id == 0:
         print("Energy=",np.mean(gathered_Floc),np.var(gathered_Floc))
+        print("magnetization=",np.mean(gathered_mag))
 
-    return np.array(all_Floc)
+    return np.array(all_Floc), np.array(all_mag)
