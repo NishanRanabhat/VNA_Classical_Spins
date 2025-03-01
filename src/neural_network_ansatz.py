@@ -151,21 +151,28 @@ class binary_disordered_RNNwavefunction(nn.Module):
                     hiddens[layer] = rnn_state
 
             # Apply a cosine transformation to the final hidden state.
-            #rnn_state = torch.cos(rnn_state) + 1e-10
+            rnn_state = torch.cos(rnn_state) + 1e-10
 
             # Pass the transformed state through the site's dense network to get output probabilities.
             logits = self.dense[site](rnn_state)
             probs[:, site, :] = logits + 1e-10
 
+            #print("logits=",logits)
+            #print("probs=",probs)
+
             # Sample from the output distribution.
             sample = torch.reshape(torch.multinomial(logits + 1e-10, 1), (-1,))
             self.samples[:, site] = sample
-
+            
+            #print("sample=",self.samples)
             # Prepare the one-hot encoded sample to serve as the input for the next site.
             inputs = torch.nn.functional.one_hot(sample, num_classes=self.input_dim).type(self.type)
 
         # Compute the log-probability of the generated sequence.
         one_hot_samples = torch.nn.functional.one_hot(self.samples, num_classes=self.input_dim).type(self.type)
+        #print("one_hot_samples=",one_hot_samples)
+        #print("probs*one_hot=",torch.multiply(probs, one_hot_samples))
+        #print("sum_probs*one_hot=",torch.sum(torch.multiply(probs, one_hot_samples), dim=2) + 1e-10)
         self.log_probs = torch.sum(torch.log(torch.sum(torch.multiply(probs, one_hot_samples), dim=2) + 1e-10),dim=1)
 
         return probs

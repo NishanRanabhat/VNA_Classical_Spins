@@ -52,7 +52,7 @@ if __name__ == "__main__":
     print("annealing_steps",annealing_time*equilibrium_time+warmup_time)
 
     tic = time.time()
-    gather_interval = parameters['equilibration_time']
+    gather_interval = 1#parameters['equilibration_time']
 
     mp.spawn(run_VNA,args=(world_size,train_batch_size,rnn_type, num_layers, system_size,warmup_time, annealing_time, equilibrium_time, num_units,
                        input_dim,train_size,warmup_on, annealing_on, temp_scheduler, optimizer, scheduler_name, ftype,learning_rate, seed, T0,Tf,

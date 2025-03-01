@@ -68,4 +68,4 @@ def Fully_connected_1D(system_size:int):
          [0. 0. 0. 0.]]
     """
     # Return the strictly upper triangular part of a matrix filled with ones.
-    return np.triu(np.ones((system_size, system_size)), k=1)
+    return np.triu(np.ones((system_size, system_size)), k=1)/system_size

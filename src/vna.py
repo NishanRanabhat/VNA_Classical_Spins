@@ -6,7 +6,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.data.distributed import DistributedSampler
 from utilities import set_annealing_schedule, model_ansatz, model_class, optimizer_init, scheduler_init, seed_everything, input_data, prepare_dataloader
-from trainer import VNA_trainer
+from trainer import VNA_trainer,Brute_Gradient_Descent
 import os
 import json
 from pathlib import Path
@@ -92,6 +92,9 @@ def run_VNA(rank: int, world_size: int,train_batch_size: int,key:str, num_layers
     device = torch.device(f'cuda:{rank}')
     seed_everything(seed, rank)
     stop_time = annealing_time*equilibrium_time + warmup_time + 1
+    stop_time_brute_force = 5000
+
+    print("total_epoch=",stop_time)
 
     #define annealing schedule
     Temperature_list = set_annealing_schedule(warmup_on, temp_scheduler, warmup_time, annealing_time, equilibrium_time, T0, Tf, ftype)
@@ -107,7 +110,12 @@ def run_VNA(rank: int, world_size: int,train_batch_size: int,key:str, num_layers
 
     model = model_class(system_size,J_matrix,device,ftype)
 
-    trainer = VNA_trainer(ansatz,train_data,optimizer,scheduler,model,rank)
-    meanE, meanM = trainer.train(stop_time, Temperature_list,gather_interval)
+    #VNA training
+    #trainer = VNA_trainer(ansatz,train_data,optimizer,scheduler,model,rank)
+    #meanE, meanM = trainer.train(stop_time, Temperature_list,gather_interval)
+
+    #Brute force training at temperature=Tf
+    trainer = Brute_Gradient_Descent(ansatz,train_data,optimizer,scheduler,model,rank)
+    meanE, meanM = trainer.train(stop_time_brute_force,Tf,gather_interval)
 
     cleanup()
