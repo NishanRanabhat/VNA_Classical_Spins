@@ -69,3 +69,35 @@ def Fully_connected_1D(system_size:int):
     """
     # Return the strictly upper triangular part of a matrix filled with ones.
     return np.triu(np.ones((system_size, system_size)), k=1)/system_size
+
+import numpy as np
+
+def Nearest_neighbor_1D(system_size: int):
+    """
+    Create a nearest-neighbor interaction matrix for a 1D Ising chain 
+    (open boundary conditions).
+
+    This function returns a matrix of shape (system_size, system_size) 
+    with ones on the first superdiagonal [i, i+1] and zeros elsewhere. 
+    In 0-based indexing, that means positions (0,1), (1,2), ..., (N-2, N-1) 
+    will be set to 1, while all other entries remain zero.
+    
+    Parameters:
+        system_size (int): The number of spins (or sites) in the 1D chain.
+
+    Returns:
+        numpy.ndarray: A 2D NumPy array of shape (system_size, system_size) 
+                       with 1s in the nearest-neighbor (i, i+1) positions.
+                       
+    Example:
+        >>> matrix = Nearest_neighbor_1D(4)
+        >>> print(matrix)
+        [[0. 1. 0. 0.]
+         [0. 0. 1. 0.]
+         [0. 0. 0. 1.]
+         [0. 0. 0. 0.]]
+    """
+    # np.diag takes a 1D array and puts it on the specified diagonal (k=1 is the superdiagonal).
+    return np.diag(np.ones(system_size - 1), k=1)
+
+
