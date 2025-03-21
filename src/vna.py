@@ -49,7 +49,7 @@ def cleanup():
 
 
 def run_VNA(rank: int, world_size: int,train_batch_size: int,key:str, num_layers:int, system_size: int,warmup_time: int, annealing_time: int, 
-            equilibrium_time: int, num_units: int, input_dim,train_size: int,warmup_on:str, annealing_on:str, temp_scheduler, optimizer_type:str, scheduler_name:str,
+            equilibrium_time: int, num_units: int,weight_sharing:str,input_dim:int,train_size: int,warmup_on:str, annealing_on:str, temp_scheduler, optimizer_type:str, scheduler_name:str,
             ftype:torch.dtype, learning_rate, seed, T0,Tf,J_matrix,gather_interval):
 
     """
@@ -92,10 +92,13 @@ def run_VNA(rank: int, world_size: int,train_batch_size: int,key:str, num_layers
     device = torch.device(f'cuda:{rank}')
     seed_everything(seed, rank)
     stop_time = annealing_time*equilibrium_time + warmup_time + 1
-    stop_time_brute_force = 5000
+    stop_time_brute_force = 500
 
     print("total_epoch=",stop_time)
 
+    print("N=",system_size)
+
+    print("Tf=",Tf)
     #define annealing schedule
     Temperature_list = set_annealing_schedule(warmup_on, temp_scheduler, warmup_time, annealing_time, equilibrium_time, T0, Tf, ftype)
 
@@ -104,7 +107,7 @@ def run_VNA(rank: int, world_size: int,train_batch_size: int,key:str, num_layers
     train_data = prepare_dataloader(train_dataset, world_size, rank, train_batch_size)
 
     #initialize model and optimizer
-    ansatz = model_ansatz(key,system_size, input_dim,num_layers,ftype,num_units=num_units, seed=seed, device=device)
+    ansatz = model_ansatz(key,system_size, input_dim,num_layers,ftype,num_units=num_units,weight_sharing=weight_sharing,device=device)
     optimizer = optimizer_init(ansatz,learning_rate,optimizer_type)
     scheduler = scheduler_init(optimizer, stop_time, scheduler_name=scheduler_name)
 
@@ -117,5 +120,7 @@ def run_VNA(rank: int, world_size: int,train_batch_size: int,key:str, num_layers
     #Brute force training at temperature=Tf
     trainer = Brute_Gradient_Descent(ansatz,train_data,optimizer,scheduler,model,rank)
     meanE, meanM = trainer.train(stop_time_brute_force,Tf,gather_interval)
+
+    #print(ansatz.parameters())
 
     cleanup()

@@ -53,7 +53,7 @@ class binary_disordered_RNNwavefunction(nn.Module):
         >>> output_probs = model(inputs)
     """
 
-    def __init__(self, key, system_size, inputdim, nlayers, activation="relu",units=10, seed=111, type=torch.float32, device='cpu'):
+    def __init__(self, key, system_size, inputdim, nlayers, activation="relu",units=10, type=torch.float32, device='cpu'):
         super(binary_disordered_RNNwavefunction, self).__init__()
         
         self.hidden_dim = units
@@ -151,28 +151,134 @@ class binary_disordered_RNNwavefunction(nn.Module):
                     hiddens[layer] = rnn_state
 
             # Apply a cosine transformation to the final hidden state.
-            rnn_state = torch.cos(rnn_state) + 1e-10
+            #rnn_state = torch.cos(rnn_state) + 1e-10
 
             # Pass the transformed state through the site's dense network to get output probabilities.
             logits = self.dense[site](rnn_state)
             probs[:, site, :] = logits + 1e-10
 
-            #print("logits=",logits)
-            #print("probs=",probs)
-
             # Sample from the output distribution.
             sample = torch.reshape(torch.multinomial(logits + 1e-10, 1), (-1,))
             self.samples[:, site] = sample
             
-            #print("sample=",self.samples)
             # Prepare the one-hot encoded sample to serve as the input for the next site.
             inputs = torch.nn.functional.one_hot(sample, num_classes=self.input_dim).type(self.type)
 
         # Compute the log-probability of the generated sequence.
         one_hot_samples = torch.nn.functional.one_hot(self.samples, num_classes=self.input_dim).type(self.type)
-        #print("one_hot_samples=",one_hot_samples)
-        #print("probs*one_hot=",torch.multiply(probs, one_hot_samples))
-        #print("sum_probs*one_hot=",torch.sum(torch.multiply(probs, one_hot_samples), dim=2) + 1e-10)
         self.log_probs = torch.sum(torch.log(torch.sum(torch.multiply(probs, one_hot_samples), dim=2) + 1e-10),dim=1)
+
+        return probs
+
+class binary_disordered_RNNwavefunction_weight_sharing(nn.Module):
+    """
+    PyTorch module representing a binary disordered RNN wavefunction with weight sharing.
+    
+    This architecture uses a single set of RNN layers (here GRU cells) and a single dense network
+    that are applied identically at every site. This enforces weight sharing across sites, ensuring 
+    that the same transformation is applied regardless of site index.
+    
+    Attributes:
+        hidden_dim (int): Number of units in the hidden layer for each RNN cell.
+        input_dim (int): Dimensionality of the input, e.g., 2 for binary (0/1) inputs.
+        n_layers (int): Number of stacked RNN layers.
+        N (int): Total number of sites (spins) in the system.
+        key (str): Type of RNN cell to use; here we implement "gru" (other types can be added).
+        type (torch.dtype): Data type for the model's parameters.
+        device (str): Device on which the model will be run (e.g., 'cpu' or 'cuda').
+        rnn_layers (ModuleList): Shared GRUCell layers used for every site.
+        dense_network (nn.Sequential): Shared dense network that maps the final hidden state 
+                                       to a probability distribution over outputs.
+    """
+
+    def __init__(self, key, system_size, inputdim, nlayers, activation="relu", units=10, type=torch.float32, device='cpu'):
+        super(binary_disordered_RNNwavefunction_weight_sharing, self).__init__()
+
+        self.hidden_dim = units
+        self.input_dim = inputdim       # e.g., 2 for binary (0/1)
+        self.n_layers = nlayers
+        self.N = system_size  
+        self.activation = str(activation)           # Total number of sites (spins)
+        self.key = key
+        self.type = type
+        self.device = device
+
+        # Create a single stack of RNN layers to be used for all sites.
+        if self.key == "gru":
+            self.rnn_layers = nn.ModuleList([
+                nn.GRUCell(input_size=self.input_dim if i == 0 else self.hidden_dim,
+                           hidden_size=self.hidden_dim,
+                           dtype=self.type)
+                for i in range(self.n_layers)
+            ]).to(self.device)
+        else:
+            # Fallback for vanilla RNN; similar construction.
+            self.rnn_layers = nn.ModuleList([
+                nn.RNNCell(input_size=self.input_dim if i == 0 else self.hidden_dim,
+                           hidden_size=self.hidden_dim,
+                           nonlinearity=activation,
+                           dtype=self.type)
+                for i in range(self.n_layers)
+            ]).to(self.device)
+
+        # Create a single dense (output) network to be applied at every site.
+        self.dense_network = nn.Sequential(
+            nn.Linear(self.hidden_dim, self.hidden_dim, dtype=self.type),
+            nn.ReLU(),
+            nn.Linear(self.hidden_dim, self.input_dim, dtype=self.type),
+            nn.Softmax(dim=1)
+        ).to(self.device)
+
+    def forward(self, inputs):
+        """
+        Perform a forward pass to generate a wavefunction sample.
+        
+        The model sequentially processes each site using the same RNN layers and dense network.
+        At each site:
+          1. The input is passed through the shared stack of RNN layers.
+          2. The final hidden state is fed into the shared dense network to obtain output probabilities.
+          3. A binary sample is drawn from this distribution.
+          4. The sampled one-hot vector is used as input for the next site.
+          
+        Returns:
+            probs (torch.Tensor): Tensor of probabilities with shape (batch_size, N, input_dim).
+                                  This stores the output probabilities for each site.
+        """
+        batch_size = inputs.shape[0]
+        # Initialize hidden states for each RNN layer.
+        h = [torch.zeros(batch_size, self.hidden_dim, dtype=self.type, device=self.device)
+             for _ in range(self.n_layers)]
+
+        # Container for probabilities at each site.
+        probs = torch.zeros(batch_size, self.N, self.input_dim, dtype=self.type, device=self.device)
+        # Container for sampled configurations.
+        samples = torch.zeros(batch_size, self.N, dtype=torch.long, device=self.device)
+
+        # Process each site sequentially.
+        for site in range(self.N):
+            x = inputs
+            # Pass through the shared stack of RNN layers.
+            for layer in range(self.n_layers):
+                h[layer] = self.rnn_layers[layer](x, h[layer])
+                x = h[layer]
+
+            # Use the dense network to get probabilities.
+            logits = self.dense_network(x)
+            probs[:, site, :] = logits + 1e-10  # avoid numerical issues
+            
+            # Sample from the probability distribution.
+            sample = torch.multinomial(logits + 1e-10, num_samples=1).view(-1)
+            samples[:, site] = sample
+            
+            # Prepare the one-hot encoded sample as input for the next site.
+            inputs = torch.nn.functional.one_hot(sample, num_classes=self.input_dim).type(self.type)
+
+        # Compute the log-probability of the generated sequence.
+        one_hot_samples = torch.nn.functional.one_hot(samples, num_classes=self.input_dim).type(self.type)
+        log_probs = torch.sum(torch.log(torch.sum(probs * one_hot_samples, dim=2) + 1e-10), dim=1)
+        
+        # Store samples and log probabilities as attributes.
+        self.samples = samples
+        self.log_probs = log_probs
 
         return probs

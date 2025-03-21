@@ -4,7 +4,7 @@ import os
 import json
 from pathlib import Path
 from vna import run_VNA
-from interaction_matrix import Sherrington_Kirkpatrick_1D, Fully_connected_1D
+from interaction_matrix import Sherrington_Kirkpatrick_1D, Fully_connected_1D, Nearest_neighbor_1D
 import time
 import torch.multiprocessing as mp
 from multiprocessing import Manager
@@ -29,6 +29,7 @@ if __name__ == "__main__":
 
     num_samples = parameters['num_samples']
     num_units = parameters['num_units']
+    weight_sharing = parameters['weight_sharing']
     num_layers = parameters['num_layers']
     equilibrium_time = parameters['equilibration_time']
     warmup_time = parameters['warmup_time']
@@ -37,10 +38,9 @@ if __name__ == "__main__":
     T0=parameters['initial_temperature']
     Tf=parameters['final_temperature']
 
-    J_matrix = Fully_connected_1D(system_size)
-
+    J_matrix = Fully_connected_1D(system_size) #Nearest_neighbor_1D(system_size)
     learning_rate = 2e-3
-    seed = 12345
+    seed = 123456
     ftype= torch.float32
 
     world_size = torch.cuda.device_count()
@@ -52,10 +52,10 @@ if __name__ == "__main__":
     print("annealing_steps",annealing_time*equilibrium_time+warmup_time)
 
     tic = time.time()
-    gather_interval = 1#parameters['equilibration_time']
+    gather_interval = 1 #parameters['equilibration_time']
 
     mp.spawn(run_VNA,args=(world_size,train_batch_size,rnn_type, num_layers, system_size,warmup_time, annealing_time, equilibrium_time, num_units,
-                       input_dim,train_size,warmup_on, annealing_on, temp_scheduler, optimizer, scheduler_name, ftype,learning_rate, seed, T0,Tf,
+                       weight_sharing, input_dim,train_size,warmup_on, annealing_on, temp_scheduler, optimizer, scheduler_name, ftype,learning_rate, seed, T0,Tf,
                        J_matrix,gather_interval),nprocs=world_size,join=True)
 
     tac = time.time()

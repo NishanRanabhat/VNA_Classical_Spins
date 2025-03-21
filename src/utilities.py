@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 import random
-from neural_network_ansatz import binary_disordered_RNNwavefunction
+from neural_network_ansatz import binary_disordered_RNNwavefunction, binary_disordered_RNNwavefunction_weight_sharing
 from objective_function import One_dimensional_spin_model
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data import DataLoader, Dataset
@@ -117,10 +117,13 @@ def model_ansatz(key:str,system_size:int,input_dim:int, num_layers:int,ftype:tor
   """
 
   num_units = kwargs.get('num_units',10)
-  seed = kwargs.get('seed', 111)
+  weight_sharing=kwargs.get('weight_sharing',"true")
   device = kwargs.get('device')
 
-  ansatz =  binary_disordered_RNNwavefunction(key,system_size,input_dim,num_layers,activation="relu",units=num_units,seed=seed,type=ftype,device=device)
+  if weight_sharing == "True":
+    ansatz = binary_disordered_RNNwavefunction_weight_sharing(key,system_size,input_dim,num_layers,activation="relu",units=num_units,type=ftype,device=device)
+  else:
+    ansatz =  binary_disordered_RNNwavefunction(key,system_size,input_dim,num_layers,activation="relu",units=num_units,type=ftype,device=device)
 
   return ansatz
 
@@ -223,7 +226,7 @@ def seed_everything(seed, rank):
   torch.backends.cudnn.deterministic = True
   torch.backends.cudnn.benchmark = False
 
-def input_data(num_samples:int,input_size:int,ftype:torch.dtype):
+#def input_data(num_samples:int,input_size:int,ftype:torch.dtype):
 
   """
   Create dummy input data for testing or initialization.
@@ -240,10 +243,31 @@ def input_data(num_samples:int,input_size:int,ftype:torch.dtype):
     torch.Tensor: The dummy input tensor.
   """
 
-  dummy_input = torch.zeros(num_samples,input_size, dtype=ftype)
-  dummy_input[:,0] = torch.ones(num_samples, dtype=ftype)
+#  dummy_input = torch.zeros(num_samples,input_size, dtype=ftype)
+#  dummy_input[:,0] = torch.ones(num_samples, dtype=ftype)
 
-  return dummy_input
+#  return dummy_input
+
+def input_data(num_samples: int, input_size: int, ftype: torch.dtype):
+    """
+    Create dummy input data for testing or initialization.
+
+    Generates a dummy input tensor of shape (num_samples, input_size) with each row
+    randomly starting with either an "all up" or "all down" indicator in the first column.
+    Other features are set to zeros.
+
+    Parameters:
+        num_samples (int): Number of samples (rows) in the dummy input.
+        input_size (int): Number of features (columns) per sample.
+        ftype (torch.dtype): Data type for the tensor.
+
+    Returns:
+        torch.Tensor: The dummy input tensor.
+    """
+    dummy_input = torch.zeros(num_samples, input_size, dtype=ftype)
+    # Randomly choose for each sample whether the first column is 1 (up) or 0 (down)
+    dummy_input[:, 0] = torch.randint(0, 2, (num_samples,), dtype=torch.int64).to(ftype)
+    return dummy_input
 
 def prepare_dataloader(dataset, world_size: int, rank, batch_size: int):
 
