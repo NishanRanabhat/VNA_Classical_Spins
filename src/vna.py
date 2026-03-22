@@ -37,6 +37,7 @@ def setup(rank, world_size):
     dist.init_process_group("nccl", "env://", rank=rank, world_size=world_size)
     torch.cuda.set_device(rank)
 
+
 # FUNCTION ENDING THE PROCESS
 def cleanup():
     """

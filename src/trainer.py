@@ -392,8 +392,7 @@ class Brute_Gradient_Descent:
  
 
       if self.gpu_id == 0 and epoch % 1 == 0:
-        print("Energy=",np.mean(gathered_Floc),np.var(gathered_Floc))
-        print("magnetization=",np.mean(gathered_mag),np.var(gathered_mag))
+        print("Energy=",np.mean(gathered_Floc),np.var(gathered_Floc)," Magnetization=",np.mean(gathered_mag),np.var(gathered_mag))
 
     # Create output directory if it doesn't exist
     os.makedirs(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/', exist_ok=True)
@@ -460,7 +459,7 @@ class VQA_trainer:
   def compute_wavefunction_ratio(self, ansatz, samples):
     batch_size, system_size = samples.shape
     flipped_spins = self.generate_spin_flips(samples)
-    log_probs = ansatz.log_probability(flipped_spins.reshape((system_size+1)*batch_size, system_size)).reshape(-1, batch_size)
+    log_probs = ansatz.log_probability(0.5*(flipped_spins+1.).reshape((system_size+1)*batch_size, system_size)).reshape(-1, batch_size)
     log_wf_ratios = 0.5*(log_probs[:system_size,:]-log_probs[-1,:].unsqueeze(0))
     return torch.exp(log_wf_ratios)
 
