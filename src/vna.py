@@ -49,9 +49,9 @@ def cleanup():
     dist.destroy_process_group()
 
 
-def run_VNA(rank: int, world_size: int, eq_trainer:str, train_batch_size: int,key:str, num_layers:int, system_size: int,warmup_time: int, annealing_time: int, 
+def run_VNA(rank: int, world_size: int, eq_trainer:str, train_batch_size: int, key:str, num_layers:int, system_size: int,warmup_time: int, annealing_time: int, 
             equilibrium_time: int, num_units: int,weight_sharing:str,input_dim:int,train_size: int,warmup_on:str, annealing_on:str, temp_scheduler, optimizer_type:str, scheduler_name:str,
-            interaction:str, ftype:torch.dtype, learning_rate, seed, T0,Tf,J_matrix,gather_interval):
+            interaction_name:str, ftype:torch.dtype, learning_rate, seed, T0,Tf,J_matrix,gather_interval):
 
     """
     Run the Variational Neural Ansatz (VNA) training process in a distributed setting.
@@ -116,19 +116,19 @@ def run_VNA(rank: int, world_size: int, eq_trainer:str, train_batch_size: int,ke
 
     #VNA training
     if eq_trainer == "VNA_trainer":
-        trainer = VNA_trainer(ansatz,train_data,train_batch_size,optimizer,scheduler,model,rank)
-        meanE, meanM = trainer.train(interaction, annealing_time, stop_time, Temperature_list, gather_interval)
+        trainer = VNA_trainer(ansatz,train_data,train_batch_size,optimizer,interaction_name,weight_sharing,scheduler,model,rank)
+        meanE, meanM = trainer.train(annealing_time, stop_time, Temperature_list, gather_interval)
         model_type = "VNA_trainer"
 
     elif eq_trainer == "VQA_trainer":
-        trainer = VQA_trainer(ansatz,train_data,train_batch_size,optimizer,scheduler,model,rank)
-        meanE, meanM = trainer.train(interaction, annealing_time, stop_time, Temperature_list, gather_interval)
+        trainer = VQA_trainer(ansatz,train_data,train_batch_size,optimizer,interaction_name,weight_sharing,scheduler,model,rank)
+        meanE, meanM = trainer.train(annealing_time, stop_time, Temperature_list, gather_interval)
         model_type = "VQA_trainer"
 
     elif eq_trainer == "Brute_Gradient_Descent":
         #Brute force graient descent
-        trainer = Brute_Gradient_Descent(ansatz,train_data,train_batch_size,optimizer,scheduler,model,rank)
-        meanE, meanM = trainer.train(interaction, annealing_time, stop_time_brute_force, Tf, gather_interval)
+        trainer = Brute_Gradient_Descent(ansatz,train_data,train_batch_size,optimizer,interaction_name,weight_sharing,scheduler,model,rank)
+        meanE, meanM = trainer.train(annealing_time, stop_time_brute_force, Tf, gather_interval)
         model_type = "Brute_Gradient_Descent"
     
     model_type = eq_trainer
@@ -137,7 +137,7 @@ def run_VNA(rank: int, world_size: int, eq_trainer:str, train_batch_size: int,ke
     if rank == 0:
         save_dir = Path(f"../saved_models")
         save_dir.mkdir(exist_ok=True)
-        model_path = save_dir / f"model_{interaction}_N{system_size}_T{Tf:.2f}_tau{annealing_time}_trainer{model_type}_{num_layers}_{num_units}_trainsize_{train_batch_size}_weightsharing_{weight_sharing}.pt"
+        model_path = save_dir / f"model_{interaction_name}_N{system_size}_T{Tf:.2f}_tau{annealing_time}_trainer{model_type}_{num_layers}_{num_units}_trainsize_{train_batch_size}_weightsharing_{weight_sharing}.pt"
         torch.save({
             'model_state_dict': ansatz.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),

@@ -36,7 +36,9 @@ class VNA_trainer:
     model: Spin model that provides energy and configuration conversions.
   """
 
-  def __init__(self,ansatz: torch.nn.Module,train_data: DataLoader,train_batch_size:int, optimizer: torch.optim.Optimizer,scheduler,model,gpu_id: int):
+  def __init__(self, ansatz: torch.nn.Module,train_data: DataLoader,train_batch_size:int, 
+               optimizer: torch.optim.Optimizer, interaction_name:str, weight_sharing:str, 
+               scheduler , model, gpu_id: int):
     
     self.gpu_id = gpu_id
     self.nlayers = ansatz.n_layers
@@ -50,6 +52,8 @@ class VNA_trainer:
     self.scheduler = scheduler
     self.model = model
     self.train_batch_size = train_batch_size
+    self.interaction_name = interaction_name
+    self.weight_sharing = weight_sharing
 
   def _run_batch(self, source, Temperature):
     
@@ -140,7 +144,7 @@ class VNA_trainer:
 
     return np.concatenate([t.cpu().numpy() for t in gathered_tensor])#convert the gathered outputs into numpy and return the flattend version
 
-  def train(self, interaction, annealing_time, total_epochs: int,Temperature_list,gather_interval:int):
+  def train(self, annealing_time, total_epochs:int, Temperature_list, gather_interval:int):
 
     """
     Train the ansatz model for a specified number of epochs.
@@ -157,7 +161,6 @@ class VNA_trainer:
     Returns:
       numpy.ndarray: An array containing the mean local energy collected at each gathering interval.
     """
-    # Magnetization mismatch comes from the training process
 
     Temps, all_Eloc, all_varEloc, all_varEloc, all_mag, all_varmag, all_mag2, all_varmag2, all_mag4, all_varmag4, all_log_probs,all_Floc, all_VarFloc = [],[],[],[],[],[],[],[],[],[],[],[],[]
 
@@ -189,25 +192,23 @@ class VNA_trainer:
         all_VarFloc.append(np.var(gathered_Floc))
 
       if self.gpu_id == 0:
-        print("Energy=",np.mean(gathered_Floc),np.var(gathered_Floc))
-        print("Squared magnetization=",np.mean(gathered_mag2),np.var(gathered_mag2))
-
-    os.makedirs(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/',
-                exist_ok=True)
+        print("Ti={:.4f}, Eloc={:.7f}, variance={:.7f}".format(Temperature,np.mean(gathered_Eloc),np.var(gathered_Eloc)))
+    savepath = f'../output_files/{self.interaction_name}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_ws_{self.weight_sharing}_tau{annealing_time}/'
+    os.makedirs(savepath, exist_ok=True)
 
     if self.gpu_id == 0:
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/VNAtrain_TemperatureList={Temperature}_N={self.system_size}.npy', np.array(Temps))
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/VNAtrain_Eloc_temperature={Temperature}_N={self.system_size}.npy', np.array(all_Eloc))
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/VNAtrain_varEloc_temperature={Temperature}_N={self.system_size}.npy', np.array(all_varEloc))
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/VNAtrain_mag_temperature={Temperature}_N={self.system_size}.npy', np.array(all_mag))
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/VNAtrain_varmag_temperature={Temperature}_N={self.system_size}.npy', np.array(all_varmag))
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/VNAtrain_mag2_temperature={Temperature}_N={self.system_size}.npy', np.array(all_mag2))
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/VNAtrain_varmag2_temperature={Temperature}_N={self.system_size}.npy', np.array(all_varmag2))
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/VNAtrain_mag4_temperature={Temperature}_N={self.system_size}.npy', np.array(all_mag4))
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/VNAtrain_varmag4_temperature={Temperature}_N={self.system_size}.npy', np.array(all_varmag4))
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/VNAtrain_log_probs_temperature={Temperature}_N={self.system_size}.npy', np.array(all_log_probs))
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/VNAtrain_Floc_temperature={Temperature}_N={self.system_size}.npy', np.array(all_Floc))
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/VNAtrain_varFloc_temperature={Temperature}_N={self.system_size}.npy', np.array(all_VarFloc))
+      np.save(f'{savepath}VNAtrain_TemperatureList={Temperature}_N={self.system_size}.npy', np.array(Temps))
+      np.save(f'{savepath}VNAtrain_Eloc_temperature={Temperature}_N={self.system_size}.npy', np.array(all_Eloc))
+      np.save(f'{savepath}VNAtrain_varEloc_temperature={Temperature}_N={self.system_size}.npy', np.array(all_varEloc))
+      np.save(f'{savepath}VNAtrain_mag_temperature={Temperature}_N={self.system_size}.npy', np.array(all_mag))
+      np.save(f'{savepath}VNAtrain_varmag_temperature={Temperature}_N={self.system_size}.npy', np.array(all_varmag))
+      np.save(f'{savepath}VNAtrain_mag2_temperature={Temperature}_N={self.system_size}.npy', np.array(all_mag2))
+      np.save(f'{savepath}VNAtrain_varmag2_temperature={Temperature}_N={self.system_size}.npy', np.array(all_varmag2))
+      np.save(f'{savepath}VNAtrain_mag4_temperature={Temperature}_N={self.system_size}.npy', np.array(all_mag4))
+      np.save(f'{savepath}VNAtrain_varmag4_temperature={Temperature}_N={self.system_size}.npy', np.array(all_varmag4))
+      np.save(f'{savepath}VNAtrain_log_probs_temperature={Temperature}_N={self.system_size}.npy', np.array(all_log_probs))
+      np.save(f'{savepath}VNAtrain_Floc_temperature={Temperature}_N={ self.system_size}.npy', np.array(all_Floc))
+      np.save(f'{savepath}VNAtrain_varFloc_temperature={Temperature}_N={ self.system_size}.npy', np.array(all_VarFloc))
 
     return np.array(all_Floc), np.array(all_mag)
 
@@ -230,7 +231,9 @@ class Brute_Gradient_Descent:
     model: Spin model that provides energy and configuration conversions.
   """
 
-  def __init__(self,ansatz: torch.nn.Module,train_data: DataLoader,train_batch_size: int,optimizer: torch.optim.Optimizer,scheduler,model,gpu_id: int):
+  def __init__(self,ansatz: torch.nn.Module,train_data: DataLoader,train_batch_size: int, 
+              optimizer: torch.optim.Optimizer,interaction_name: str,weight_sharing: str,
+              scheduler,model,gpu_id: int):
     
     self.gpu_id = gpu_id
     self.nlayers = ansatz.n_layers
@@ -244,6 +247,8 @@ class Brute_Gradient_Descent:
     self.scheduler = scheduler
     self.model = model
     self.train_batch_size = train_batch_size
+    self.interaction_name = interaction_name
+    self.weight_sharing = weight_sharing
 
   def count_neg_and_pos(self, x: torch.Tensor) -> torch.Tensor:
     """
@@ -345,7 +350,7 @@ class Brute_Gradient_Descent:
 
     return np.concatenate([t.cpu().numpy() for t in gathered_tensor])#convert the gathered outputs into numpy and return the flattend version
 
-  def train(self, interaction, annealing_time, total_epochs: int,Temperature, gather_interval:int):
+  def train(self, annealing_time, total_epochs: int,Temperature, gather_interval:int):
 
     """
     Train the ansatz model for a specified number of epochs.
@@ -392,23 +397,24 @@ class Brute_Gradient_Descent:
  
 
       if self.gpu_id == 0 and epoch % 1 == 0:
-        print("Energy=",np.mean(gathered_Floc),np.var(gathered_Floc)," Magnetization=",np.mean(gathered_mag),np.var(gathered_mag))
+        print("Epoch {}/{}: Eloc={:.4f}, variance={:.4f}".format(epoch+1, total_epochs, np.mean(gathered_Eloc), np.var(gathered_Eloc)))
 
     # Create output directory if it doesn't exist
-    os.makedirs(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/', exist_ok=True)
+    savepath = f'../output_files/{self.interaction_name}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_ws_{self.weight_sharing}_tau{annealing_time}/'
+    os.makedirs(savepath, exist_ok=True)
 
     if self.gpu_id == 0:
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/BGD_Eloc_temperature={Temperature}_N={self.system_size}.npy', np.array(all_Eloc))
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/BGD_varEloc_temperature={Temperature}_N={self.system_size}.npy', np.array(all_varEloc))
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/BGD_mag_temperature={Temperature}_N={self.system_size}.npy', np.array(all_mag))
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/BGD_varmag_temperature={Temperature}_N={self.system_size}.npy', np.array(all_varmag))
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/BGD_mag2_temperature={Temperature}_N={self.system_size}.npy', np.array(all_mag2))
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/BGD_varmag2_temperature={Temperature}_N={self.system_size}.npy', np.array(all_varmag2))
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/BGD_mag4_temperature={Temperature}_N={self.system_size}.npy', np.array(all_mag4))
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/BGD_varmag4_temperature={Temperature}_N={self.system_size}.npy', np.array(all_varmag4))        
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/BGD_log_probs_temperature={Temperature}_N={self.system_size}.npy', np.array(all_log_probs))
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/BGD_Floc_temperature={Temperature}_N={self.system_size}.npy', np.array(all_Floc))
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/BGD_varFloc_temperature={Temperature}_N={self.system_size}.npy', np.array(all_VarFloc))
+      np.save(f'{savepath}BGD_Eloc_temperature={Temperature}_N={self.system_size}.npy', np.array(all_Eloc))
+      np.save(f'{savepath}BGD_varEloc_temperature={Temperature}_N={self.system_size}.npy', np.array(all_varEloc))
+      np.save(f'{savepath}BGD_mag_temperature={Temperature}_N={self.system_size}.npy', np.array(all_mag))
+      np.save(f'{savepath}BGD_varmag_temperature={Temperature}_N={self.system_size}.npy', np.array(all_varmag))
+      np.save(f'{savepath}BGD_mag2_temperature={Temperature}_N={self.system_size}.npy', np.array(all_mag2))
+      np.save(f'{savepath}BGD_varmag2_temperature={Temperature}_N={self.system_size}.npy', np.array(all_varmag2))
+      np.save(f'{savepath}BGD_mag4_temperature={Temperature}_N={self.system_size}.npy', np.array(all_mag4))
+      np.save(f'{savepath}BGD_varmag4_temperature={Temperature}_N={self.system_size}.npy', np.array(all_varmag4))        
+      np.save(f'{savepath}BGD_log_probs_temperature={Temperature}_N={self.system_size}.npy', np.array(all_log_probs))
+      np.save(f'{savepath}BGD_Floc_temperature={Temperature}_N={self.system_size}.npy', np.array(all_Floc))
+      np.save(f'{savepath}BGD_varFloc_temperature={Temperature}_N={self.system_size}.npy', np.array(all_VarFloc))
 
 
     return np.array(all_Floc), np.array(all_mag)
@@ -432,7 +438,9 @@ class VQA_trainer:
     model: Spin model that provides energy and configuration conversions.
   """
 
-  def __init__(self,ansatz: torch.nn.Module,train_data: DataLoader,train_batch_size:int, optimizer: torch.optim.Optimizer,scheduler,model,gpu_id: int):
+  def __init__(self,ansatz: torch.nn.Module,train_data: DataLoader,train_batch_size:int, 
+              optimizer: torch.optim.Optimizer, interaction_name: str,weight_sharing: str,
+              scheduler,model,gpu_id: int):
     
     self.gpu_id = gpu_id
     self.nlayers = ansatz.n_layers
@@ -446,6 +454,8 @@ class VQA_trainer:
     self.scheduler = scheduler
     self.model = model
     self.train_batch_size = train_batch_size
+    self.interaction_name = interaction_name
+    self.weight_sharing = weight_sharing
 
   def generate_spin_flips(self, samples):
     batch_size, system_size = samples.shape
@@ -553,7 +563,7 @@ class VQA_trainer:
 
     return np.concatenate([t.cpu().numpy() for t in gathered_tensor])#convert the gathered outputs into numpy and return the flattend version
 
-  def train(self, interaction, annealing_time, total_epochs: int,Temperature_list,gather_interval:int):
+  def train(self, annealing_time, total_epochs: int,Temperature_list,gather_interval:int):
 
     """
     Train the ansatz model for a specified number of epochs.
@@ -599,24 +609,21 @@ class VQA_trainer:
         all_log_probs.append(np.mean(gathered_log_probs))
 
       if self.gpu_id == 0:
-        print("Gamma=", Temperature)
-        print("Energy=",np.mean(gathered_Eloc),np.var(gathered_Eloc))
-        print("Squared magnetization=",np.mean(gathered_mag2),np.var(gathered_mag2))
-        print("=============================================================")
+        print("Gamma={:.4f}, Eloc={:.7f}, variance={:.7f}".format(Temperature,np.mean(gathered_Eloc),np.var(gathered_Eloc)))
 
-    os.makedirs(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/',
-                exist_ok=True)
+    savepath = f'../output_files/{self.interaction_name}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_ws_{self.weight_sharing}_tau{annealing_time}/'
+    os.makedirs(savepath, exist_ok=True)
 
     if self.gpu_id == 0:
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/VQAtrain_TemperatureList={Temperature}_N={self.system_size}.npy', np.array(Temps))
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/VQAtrain_Eloc_temperature={Temperature}_N={self.system_size}.npy', np.array(all_Eloc))
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/VQAtrain_varEloc_temperature={Temperature}_N={self.system_size}.npy', np.array(all_varEloc))
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/VQAtrain_mag_temperature={Temperature}_N={self.system_size}.npy', np.array(all_mag))
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/VQAtrain_varmag_temperature={Temperature}_N={self.system_size}.npy', np.array(all_varmag))
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/VQAtrain_mag2_temperature={Temperature}_N={self.system_size}.npy', np.array(all_mag2))
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/VQAtrain_varmag2_temperature={Temperature}_N={self.system_size}.npy', np.array(all_varmag2))
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/VQAtrain_mag4_temperature={Temperature}_N={self.system_size}.npy', np.array(all_mag4))
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/VQAtrain_varmag4_temperature={Temperature}_N={self.system_size}.npy', np.array(all_varmag4))
-      np.save(f'../output_files/{interaction}_sample{self.train_batch_size}_layer{self.nlayers}_Nh{self.hiden_dim}_tau{annealing_time}/VQAtrain_log_probs_temperature={Temperature}_N={self.system_size}.npy', np.array(all_log_probs))
+      np.save(f'{savepath}VQAtrain_TemperatureList={Temperature}_N={self.system_size}.npy', np.array(Temps))
+      np.save(f'{savepath}VQAtrain_Eloc_temperature={Temperature}_N={self.system_size}.npy', np.array(all_Eloc))
+      np.save(f'{savepath}VQAtrain_varEloc_temperature={Temperature}_N={self.system_size}.npy', np.array(all_varEloc))
+      np.save(f'{savepath}VQAtrain_mag_temperature={Temperature}_N={self.system_size}.npy', np.array(all_mag))
+      np.save(f'{savepath}VQAtrain_varmag_temperature={Temperature}_N={self.system_size}.npy', np.array(all_varmag))
+      np.save(f'{savepath}VQAtrain_mag2_temperature={Temperature}_N={self.system_size}.npy', np.array(all_mag2))
+      np.save(f'{savepath}VQAtrain_varmag2_temperature={Temperature}_N={self.system_size}.npy', np.array(all_varmag2))
+      np.save(f'{savepath}VQAtrain_mag4_temperature={Temperature}_N={self.system_size}.npy', np.array(all_mag4))
+      np.save(f'{savepath}VQAtrain_varmag4_temperature={Temperature}_N={self.system_size}.npy', np.array(all_varmag4))
+      np.save(f'{savepath}VQAtrain_log_probs_temperature={Temperature}_N={self.system_size}.npy', np.array(all_log_probs))
 
     return np.array(all_Eloc), np.array(all_mag)
