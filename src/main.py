@@ -22,6 +22,8 @@ if __name__ == "__main__":
         parameters = json.load(openfile)
     
     # Get system_size from command-line arguments
+    seed = parameters['seed']
+    T0 = parameters['initial_temperature']
     Tf = parameters['final_temperature']
     system_size = parameters['system_size']
     input_dim = parameters['input_dim']
@@ -39,28 +41,24 @@ if __name__ == "__main__":
     num_layers = parameters['num_layers']
     equilibrium_time = parameters['equilibration_time']
     warmup_time = parameters['warmup_time']
-    interaction = parameters['interaction']
-    
-    annealing_time = int(sys.argv[1])
+    interaction_name = parameters['interaction']
     # annealing_time = parameters['annealing_time']
+    annealing_time = int(sys.argv[1])
 
-    T0 = parameters['initial_temperature']
-    # parameters['final_temperature'] =Tf
-    
-    if parameters['interaction'] == "nearest_neighbor":
+    if interaction_name == "nearest_neighbor":
         J_matrix = Nearest_neighbor_1D(system_size)
-    elif parameters['interaction'] == "fully_connected":
+    elif interaction_name == "fully_connected":
         J_matrix = Fully_connected_1D(system_size)
-    elif parameters['interaction'] == "sherrington_kirkpatrick":
+    elif interaction_name == "sherrington_kirkpatrick":
         J_matrix = Sherrington_Kirkpatrick_1D(system_size)
     else:
-        raise ValueError("Invalid interaction type specified in parameters.")
-    print("Interaction matrix J:", parameters['interaction'])
+        error_message = ("Invalid interaction type specified in parameters"
+            f": {parameters['interaction']}. Valid options are 'nearest_neighbor',"
+            " 'fully_connected', or 'sherrington_kirkpatrick'.")
+        raise ValueError(error_message)
     
-    seed = 278305
     ftype = torch.float32
 
-    key = parameters['rnn_type']
     world_size = torch.cuda.device_count()
     train_batch_size = int(num_samples / world_size)
     sample_batch_size = train_batch_size
@@ -73,8 +71,13 @@ if __name__ == "__main__":
     tic = time.time()
     gather_interval = 1  # parameters['equilibration_time']
 
-    mp.spawn(run_VNA, args=(world_size, eq_trainer, train_batch_size, rnn_type, num_layers, system_size, warmup_time, annealing_time, equilibrium_time, num_units, weight_sharing,
-                            input_dim, train_size, warmup_on, annealing_on, temp_scheduler, optimizer, scheduler_name, interaction, ftype, learning_rate, seed, T0, Tf,
+    mp.spawn(run_VNA, args=(world_size, eq_trainer, train_batch_size, 
+                            rnn_type, num_layers, 
+                            system_size, warmup_time, annealing_time, equilibrium_time, 
+                            num_units, weight_sharing, input_dim, train_size, 
+                            warmup_on, annealing_on,
+                            temp_scheduler, optimizer, 
+                            scheduler_name, interaction_name, ftype, learning_rate, seed, T0, Tf,
                             J_matrix, gather_interval), nprocs=world_size, join=True)
     
 
